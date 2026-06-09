@@ -5,10 +5,10 @@
 ## Features
 
 - `ffmpeg` で動画から音声を抽出
-- ElevenLabs Scribe v2 でタイムスタンプ付き文字起こし
+- ElevenLabs Scribe v2 で話者分離付きのタイムスタンプ付き文字起こし
 - OpenCV でフレーム差分を検知し、画面が変わったタイミングだけ画像保存
 - Codex app-server で抽出画像を解析
-- 音声タイムラインと画面タイムラインを合わせて `minutes.md` を生成
+- 音声タイムラインと画面タイムラインを合わせて、指定テンプレートの `minutes.md` を生成
 
 ## Requirements
 
@@ -60,6 +60,12 @@ Codex effortは `low`, `medium`, `high`, `xhigh` が `gpt-5.5` で使えます�
 uv run video-meeting-minutes path/to/meeting.mp4
 ```
 
+話者分離はデフォルトで有効です。無効化する場合:
+
+```bash
+uv run video-meeting-minutes path/to/meeting.mp4 --no-diarize
+```
+
 用語補正を効かせる場合:
 
 ```bash
@@ -95,4 +101,5 @@ output/<video-name>_<timestamp>/
 
 - フレーム差分は `--frame-threshold`, `--min-frame-gap`, `--sample-fps` で調整できます。
 - 画面共有の小さい文字や低解像度動画では、画像解析の精度が落ちます。
+- 議事録は `参加者`, `決定事項`, `TODO`, `発言要旨` のテンプレートで生成します。
 - 議事録生成では、音声で明示された内容と画面に映っていた内容を分けて扱うようCodex app-serverへ依頼します。

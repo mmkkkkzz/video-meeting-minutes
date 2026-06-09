@@ -35,7 +35,20 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="ElevenLabs Scribe model. Default: ELEVENLABS_SCRIBE_MODEL or scribe_v2.",
     )
-    parser.add_argument("--diarize", action="store_true", help="Enable ElevenLabs diarization.")
+    diarize_group = parser.add_mutually_exclusive_group()
+    diarize_group.add_argument(
+        "--diarize",
+        dest="diarize",
+        action="store_true",
+        default=True,
+        help="Enable ElevenLabs diarization. Default: enabled.",
+    )
+    diarize_group.add_argument(
+        "--no-diarize",
+        dest="diarize",
+        action="store_false",
+        help="Disable ElevenLabs diarization.",
+    )
     parser.add_argument("--no-verbatim", action="store_true")
     parser.add_argument("--sample-fps", type=float, default=1.0)
     parser.add_argument("--frame-threshold", type=float, default=18.0)
@@ -213,7 +226,8 @@ def main() -> int:
     )
     print(f"Saved {len(frames)} changed frames.", flush=True)
 
-    print(f"Transcribing with ElevenLabs {scribe_model}...", flush=True)
+    diarize_label = "with diarization" if args.diarize else "without diarization"
+    print(f"Transcribing with ElevenLabs {scribe_model} {diarize_label}...", flush=True)
     transcript = transcribe_with_scribe(
         audio_path,
         api_key=elevenlabs_api_key,
@@ -283,6 +297,7 @@ def main() -> int:
             "minutes": str(minutes_path),
             "language_code": language_code,
             "scribe_model": scribe_model,
+            "diarize": args.diarize,
             "codex_command": args.codex_command,
             "codex_model": codex_model,
             "codex_effort": codex_effort,
