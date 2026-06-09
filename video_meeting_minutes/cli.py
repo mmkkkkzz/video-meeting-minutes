@@ -16,6 +16,11 @@ from .scribe import transcribe_with_scribe, transcript_segments, write_transcrip
 from .timefmt import format_time
 
 
+CODEX_EFFORT_CHOICES = ("none", "minimal", "low", "medium", "high", "xhigh")
+DEFAULT_CODEX_MODEL = "gpt-5.5"
+DEFAULT_CODEX_EFFORT = "medium"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate meeting minutes from a video using ElevenLabs Scribe v2 and visual frame analysis."
@@ -37,16 +42,38 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-frame-gap", type=float, default=8.0)
     parser.add_argument("--max-frames", type=int, default=80)
     parser.add_argument("--codex-command", default="codex", help="Codex CLI command.")
-    parser.add_argument("--codex-model", default=None, help="Default Codex model override.")
+    parser.add_argument(
+        "--codex-model",
+        default=None,
+        help=f"Default Codex model override. Default: CODEX_MODEL or {DEFAULT_CODEX_MODEL}.",
+    )
+    parser.add_argument(
+        "--codex-effort",
+        choices=CODEX_EFFORT_CHOICES,
+        default=None,
+        help=f"Default Codex reasoning effort. Default: CODEX_EFFORT or {DEFAULT_CODEX_EFFORT}.",
+    )
     parser.add_argument(
         "--vision-model",
         default=None,
         help="Codex model for frame image analysis. Default: CODEX_VISION_MODEL or CODEX_MODEL.",
     )
     parser.add_argument(
+        "--vision-effort",
+        choices=CODEX_EFFORT_CHOICES,
+        default=None,
+        help="Codex effort for frame image analysis. Default: CODEX_VISION_EFFORT or CODEX_EFFORT.",
+    )
+    parser.add_argument(
         "--minutes-model",
         default=None,
         help="Codex model for minutes generation. Default: CODEX_MINUTES_MODEL or CODEX_MODEL.",
+    )
+    parser.add_argument(
+        "--minutes-effort",
+        choices=CODEX_EFFORT_CHOICES,
+        default=None,
+        help="Codex effort for minutes generation. Default: CODEX_MINUTES_EFFORT or CODEX_EFFORT.",
     )
     parser.add_argument("--codex-timeout", type=float, default=600)
     parser.add_argument(
@@ -78,6 +105,19 @@ def require_env(name: str) -> str:
     value = os.getenv(name)
     if not value:
         raise RuntimeError(f"{name} is missing. Put it in .env first.")
+    return value
+
+
+def validate_codex_effort(name: str, value: str | None) -> str | None:
+    if value and value not in CODEX_EFFORT_CHOICES:
+        choices = ", ".join(CODEX_EFFORT_CHOICES)
+        raise RuntimeError(f"{name} must be one of: {choices}")
+    return value
+
+
+def normalize_codex_model(value: str | None) -> str | None:
+    if value == "gpt5.5":
+        return "gpt-5.5"
     return value
 
 
@@ -126,9 +166,21 @@ def main() -> int:
 
     language_code = args.language_code or os.getenv("ELEVENLABS_LANGUAGE_CODE") or "ja"
     scribe_model = args.scribe_model or os.getenv("ELEVENLABS_SCRIBE_MODEL") or "scribe_v2"
-    codex_model = args.codex_model or os.getenv("CODEX_MODEL")
-    vision_model = args.vision_model or os.getenv("CODEX_VISION_MODEL") or codex_model
-    minutes_model = args.minutes_model or os.getenv("CODEX_MINUTES_MODEL") or codex_model
+    codex_model = normalize_codex_model(args.codex_model or os.getenv("CODEX_MODEL") or DEFAULT_CODEX_MODEL)
+    codex_effort = validate_codex_effort(
+        "CODEX_EFFORT",
+        args.codex_effort or os.getenv("CODEX_EFFORT") or DEFAULT_CODEX_EFFORT,
+    )
+    vision_model = normalize_codex_model(args.vision_model or os.getenv("CODEX_VISION_MODEL") or codex_model)
+    minutes_model = normalize_codex_model(args.minutes_model or os.getenv("CODEX_MINUTES_MODEL") or codex_model)
+    vision_effort = validate_codex_effort(
+        "CODEX_VISION_EFFORT",
+        args.vision_effort or os.getenv("CODEX_VISION_EFFORT") or codex_effort,
+    )
+    minutes_effort = validate_codex_effort(
+        "CODEX_MINUTES_EFFORT",
+        args.minutes_effort or os.getenv("CODEX_MINUTES_EFFORT") or codex_effort,
+    )
     keyterms = read_keyterms(args)
 
     run_dir = run_dir_for(args.output_dir, video_path)
@@ -196,6 +248,7 @@ def main() -> int:
                     client=codex_client,
                     output_path=vision_dir / "frame_analysis.json",
                     model=vision_model,
+                    effort=vision_effort,
                 )
 
             if not args.skip_minutes:
@@ -206,6 +259,7 @@ def main() -> int:
                     transcript_segments=segments,
                     frame_analyses=analyses,
                     model=minutes_model,
+                    effort=minutes_effort,
                 )
                 minutes_path = run_dir / "minutes.md"
                 minutes_path.write_text(minutes_text + "\n", encoding="utf-8")
@@ -231,8 +285,11 @@ def main() -> int:
             "scribe_model": scribe_model,
             "codex_command": args.codex_command,
             "codex_model": codex_model,
+            "codex_effort": codex_effort,
             "vision_model": None if args.skip_vision else vision_model,
+            "vision_effort": None if args.skip_vision else vision_effort,
             "minutes_model": None if args.skip_minutes else minutes_model,
+            "minutes_effort": None if args.skip_minutes else minutes_effort,
             "vision_backend": None if args.skip_vision else "codex-app-server",
             "minutes_backend": None if args.skip_minutes else "codex-app-server",
             "keyterms": keyterms,

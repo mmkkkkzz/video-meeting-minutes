@@ -204,6 +204,7 @@ class CodexAppServerClient:
         local_images: list[Path] | None = None,
         output_schema: dict[str, Any] | None = None,
         model: str | None = None,
+        effort: str | None = None,
     ) -> str:
         if not self._thread_id:
             raise CodexAppServerError("thread has not been started")
@@ -232,6 +233,8 @@ class CodexAppServerClient:
         turn_model = model or self.model
         if turn_model:
             params["model"] = turn_model
+        if effort:
+            params["effort"] = effort
         if output_schema:
             params["outputSchema"] = output_schema
 

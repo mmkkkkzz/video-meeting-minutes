@@ -13,6 +13,7 @@ def analyze_frame(
     frame: FrameEvent,
     *,
     model: str | None = None,
+    effort: str | None = None,
 ) -> FrameAnalysis:
     prompt = f"""
 この画像は会議動画から画面差分で抽出されたフレームです。
@@ -28,7 +29,7 @@ def analyze_frame(
         index=frame.index,
         timestamp=frame.timestamp,
         image_path=frame.path,
-        analysis=client.ask(prompt, local_images=[frame.path], model=model),
+        analysis=client.ask(prompt, local_images=[frame.path], model=model, effort=effort),
     )
 
 
@@ -38,11 +39,12 @@ def analyze_frames(
     client: CodexAppServerClient,
     output_path: Path,
     model: str | None = None,
+    effort: str | None = None,
 ) -> list[FrameAnalysis]:
     analyses: list[FrameAnalysis] = []
     for frame in frames:
         print(f"Analyzing frame {frame.index}/{len(frames)} at {format_time(frame.timestamp)}", flush=True)
-        analyses.append(analyze_frame(client, frame, model=model))
+        analyses.append(analyze_frame(client, frame, model=model, effort=effort))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
@@ -78,6 +80,7 @@ def generate_minutes(
     transcript_segments: list[TranscriptSegment],
     frame_analyses: list[FrameAnalysis],
     model: str | None = None,
+    effort: str | None = None,
 ) -> str:
     prompt = f"""
 あなたは会議録作成担当です。
@@ -99,4 +102,4 @@ def generate_minutes(
 画面タイムライン:
 {visual_context_for_prompt(frame_analyses)}
 """.strip()
-    return client.ask(prompt, model=model)
+    return client.ask(prompt, model=model, effort=effort)

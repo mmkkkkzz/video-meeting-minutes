@@ -32,9 +32,12 @@ ELEVENLABS_LANGUAGE_CODE=ja
 ELEVENLABS_SCRIBE_MODEL=scribe_v2
 
 # Codex app-server model defaults
-CODEX_MODEL=
+CODEX_MODEL=gpt-5.5
+CODEX_EFFORT=medium
 CODEX_VISION_MODEL=
+CODEX_VISION_EFFORT=
 CODEX_MINUTES_MODEL=
+CODEX_MINUTES_EFFORT=
 ```
 
 Codex側は `codex login` 済みである必要があります。
@@ -45,6 +48,11 @@ Codex側は `codex login` 済みである必要があります。
 - 議事録生成: `CODEX_MINUTES_MODEL`
 - 文字起こし: `ELEVENLABS_SCRIBE_MODEL`
 - Codex共通のfallback: `CODEX_MODEL`
+- Codex共通effort: `CODEX_EFFORT`
+- 画像解析effort: `CODEX_VISION_EFFORT`
+- 議事録生成effort: `CODEX_MINUTES_EFFORT`
+
+Codex effortは `low`, `medium`, `high`, `xhigh` が `gpt-5.5` で使えます。
 
 ## Usage
 
