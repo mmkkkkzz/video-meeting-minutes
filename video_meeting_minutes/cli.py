@@ -8,9 +8,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .codex_app import CodexAppServerClient
+from .codex_tools import analyze_frames, generate_minutes
 from .media import detect_changed_frames, extract_audio, get_video_duration, require_media_tools
 from .models import FrameAnalysis
-from .openai_tools import analyze_frames, generate_minutes
 from .scribe import transcribe_with_scribe, transcript_segments, write_transcript_outputs
 from .timefmt import format_time
 
@@ -31,10 +32,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--frame-threshold", type=float, default=18.0)
     parser.add_argument("--min-frame-gap", type=float, default=8.0)
     parser.add_argument("--max-frames", type=int, default=80)
-    parser.add_argument("--vision-model", default=None)
-    parser.add_argument("--minutes-model", default=None)
-    parser.add_argument("--skip-vision", action="store_true", help="Skip OpenAI frame analysis.")
-    parser.add_argument("--skip-minutes", action="store_true", help="Skip OpenAI minutes generation.")
+    parser.add_argument("--codex-command", default="codex", help="Codex CLI command.")
+    parser.add_argument("--codex-model", default=None, help="Optional Codex model override.")
+    parser.add_argument("--codex-timeout", type=float, default=600)
+    parser.add_argument(
+        "--codex-keep-stderr",
+        action="store_true",
+        help="Keep app-server stderr visible for debugging.",
+    )
+    parser.add_argument("--skip-vision", action="store_true", help="Skip Codex frame analysis.")
+    parser.add_argument("--skip-minutes", action="store_true", help="Skip Codex minutes generation.")
     return parser.parse_args()
 
 
@@ -77,7 +84,7 @@ def write_basic_minutes(
     lines = [
         f"# {video_name} 議事録ドラフト",
         "",
-        "OpenAIの議事録生成はスキップされました。",
+        "Codex app-server による議事録生成はスキップされました。",
         "",
         "## 参照ファイル",
         f"- 文字起こし: `{transcript_text_path}`",
@@ -102,15 +109,9 @@ def main() -> int:
 
     require_media_tools()
     elevenlabs_api_key = require_env("ELEVENLABS_API_KEY")
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not args.skip_vision and not openai_api_key:
-        raise RuntimeError("OPENAI_API_KEY is missing. Use --skip-vision or put it in .env.")
-    if not args.skip_minutes and not openai_api_key:
-        raise RuntimeError("OPENAI_API_KEY is missing. Use --skip-minutes or put it in .env.")
 
     language_code = args.language_code or os.getenv("ELEVENLABS_LANGUAGE_CODE") or "ja"
-    vision_model = args.vision_model or os.getenv("OPENAI_VISION_MODEL") or "gpt-4.1-mini"
-    minutes_model = args.minutes_model or os.getenv("OPENAI_MINUTES_MODEL") or "gpt-4.1-mini"
+    codex_model = args.codex_model or os.getenv("CODEX_MODEL")
     keyterms = read_keyterms(args)
 
     run_dir = run_dir_for(args.output_dir, video_path)
@@ -162,27 +163,40 @@ def main() -> int:
     print(f"Saved transcript: {transcript_text_path}", flush=True)
 
     analyses: list[FrameAnalysis] = []
-    if not args.skip_vision and openai_api_key:
-        analyses = analyze_frames(
-            frames,
-            api_key=openai_api_key,
-            model=vision_model,
-            output_path=vision_dir / "frame_analysis.json",
-        )
-
-    if not args.skip_minutes and openai_api_key:
-        print("Generating minutes...", flush=True)
-        minutes_text = generate_minutes(
-            api_key=openai_api_key,
-            model=minutes_model,
-            video_name=video_path.name,
-            transcript_segments=segments,
-            frame_analyses=analyses,
-        )
-        minutes_path = run_dir / "minutes.md"
-        minutes_path.write_text(minutes_text + "\n", encoding="utf-8")
-    else:
+    if args.skip_vision and args.skip_minutes:
         minutes_path = write_basic_minutes(run_dir, video_path.name, transcript_text_path, analyses)
+    else:
+        with CodexAppServerClient(
+            cwd=Path.cwd(),
+            command=args.codex_command,
+            model=codex_model,
+            timeout_seconds=args.codex_timeout,
+            keep_stderr=args.codex_keep_stderr,
+        ) as codex_client:
+            if not args.skip_vision:
+                analyses = analyze_frames(
+                    frames,
+                    client=codex_client,
+                    output_path=vision_dir / "frame_analysis.json",
+                )
+
+            if not args.skip_minutes:
+                print("Generating minutes with Codex app-server...", flush=True)
+                minutes_text = generate_minutes(
+                    client=codex_client,
+                    video_name=video_path.name,
+                    transcript_segments=segments,
+                    frame_analyses=analyses,
+                )
+                minutes_path = run_dir / "minutes.md"
+                minutes_path.write_text(minutes_text + "\n", encoding="utf-8")
+            else:
+                minutes_path = write_basic_minutes(
+                    run_dir,
+                    video_path.name,
+                    transcript_text_path,
+                    analyses,
+                )
 
     write_manifest(
         run_dir,
@@ -196,8 +210,10 @@ def main() -> int:
             "minutes": str(minutes_path),
             "language_code": language_code,
             "scribe_model": args.scribe_model,
-            "vision_model": None if args.skip_vision else vision_model,
-            "minutes_model": None if args.skip_minutes else minutes_model,
+            "codex_command": args.codex_command,
+            "codex_model": codex_model,
+            "vision_backend": None if args.skip_vision else "codex-app-server",
+            "minutes_backend": None if args.skip_minutes else "codex-app-server",
             "keyterms": keyterms,
         },
     )

@@ -7,7 +7,7 @@
 - `ffmpeg` で動画から音声を抽出
 - ElevenLabs Scribe v2 でタイムスタンプ付き文字起こし
 - OpenCV でフレーム差分を検知し、画面が変わったタイミングだけ画像保存
-- OpenAI Vision で抽出画像を解析
+- Codex app-server で抽出画像を解析
 - 音声タイムラインと画面タイムラインを合わせて `minutes.md` を生成
 
 ## Requirements
@@ -16,7 +16,7 @@
 - uv
 - ffmpeg / ffprobe
 - ElevenLabs API key
-- OpenAI API key
+- Codex CLI login
 
 ```bash
 brew install ffmpeg
@@ -28,8 +28,9 @@ cp .env.example .env
 
 ```bash
 ELEVENLABS_API_KEY=...
-OPENAI_API_KEY=...
 ```
+
+Codex側は `codex login` 済みである必要があります。
 
 ## Usage
 
@@ -44,7 +45,7 @@ uv run video-meeting-minutes path/to/meeting.mp4 \
   --keyterms 勤怠管理 受給者証 事業所 ヘルパー 監査ログ ログインID
 ```
 
-OpenAI解析をスキップして、音声抽出・フレーム抽出・文字起こしだけ行う場合:
+Codex解析をスキップして、音声抽出・フレーム抽出・文字起こしだけ行う場合:
 
 ```bash
 uv run video-meeting-minutes path/to/meeting.mp4 --skip-vision --skip-minutes
@@ -72,4 +73,4 @@ output/<video-name>_<timestamp>/
 
 - フレーム差分は `--frame-threshold`, `--min-frame-gap`, `--sample-fps` で調整できます。
 - 画面共有の小さい文字や低解像度動画では、画像解析の精度が落ちます。
-- 議事録生成では、音声で明示された内容と画面に映っていた内容を分けて扱うようプロンプトしています。
+- 議事録生成では、音声で明示された内容と画面に映っていた内容を分けて扱うようCodex app-serverへ依頼します。
