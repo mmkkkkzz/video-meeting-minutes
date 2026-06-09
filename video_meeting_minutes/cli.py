@@ -25,7 +25,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--language-code", default=None, help="ElevenLabs language code. Default: ja")
     parser.add_argument("--keyterms", nargs="*", default=[], help="Key terms for Scribe v2.")
     parser.add_argument("--keyterms-file", type=Path, default=None)
-    parser.add_argument("--scribe-model", default="scribe_v2")
+    parser.add_argument(
+        "--scribe-model",
+        default=None,
+        help="ElevenLabs Scribe model. Default: ELEVENLABS_SCRIBE_MODEL or scribe_v2.",
+    )
     parser.add_argument("--diarize", action="store_true", help="Enable ElevenLabs diarization.")
     parser.add_argument("--no-verbatim", action="store_true")
     parser.add_argument("--sample-fps", type=float, default=1.0)
@@ -33,7 +37,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-frame-gap", type=float, default=8.0)
     parser.add_argument("--max-frames", type=int, default=80)
     parser.add_argument("--codex-command", default="codex", help="Codex CLI command.")
-    parser.add_argument("--codex-model", default=None, help="Optional Codex model override.")
+    parser.add_argument("--codex-model", default=None, help="Default Codex model override.")
+    parser.add_argument(
+        "--vision-model",
+        default=None,
+        help="Codex model for frame image analysis. Default: CODEX_VISION_MODEL or CODEX_MODEL.",
+    )
+    parser.add_argument(
+        "--minutes-model",
+        default=None,
+        help="Codex model for minutes generation. Default: CODEX_MINUTES_MODEL or CODEX_MODEL.",
+    )
     parser.add_argument("--codex-timeout", type=float, default=600)
     parser.add_argument(
         "--codex-keep-stderr",
@@ -111,7 +125,10 @@ def main() -> int:
     elevenlabs_api_key = require_env("ELEVENLABS_API_KEY")
 
     language_code = args.language_code or os.getenv("ELEVENLABS_LANGUAGE_CODE") or "ja"
+    scribe_model = args.scribe_model or os.getenv("ELEVENLABS_SCRIBE_MODEL") or "scribe_v2"
     codex_model = args.codex_model or os.getenv("CODEX_MODEL")
+    vision_model = args.vision_model or os.getenv("CODEX_VISION_MODEL") or codex_model
+    minutes_model = args.minutes_model or os.getenv("CODEX_MINUTES_MODEL") or codex_model
     keyterms = read_keyterms(args)
 
     run_dir = run_dir_for(args.output_dir, video_path)
@@ -144,11 +161,11 @@ def main() -> int:
     )
     print(f"Saved {len(frames)} changed frames.", flush=True)
 
-    print("Transcribing with ElevenLabs Scribe v2...", flush=True)
+    print(f"Transcribing with ElevenLabs {scribe_model}...", flush=True)
     transcript = transcribe_with_scribe(
         audio_path,
         api_key=elevenlabs_api_key,
-        model_id=args.scribe_model,
+        model_id=scribe_model,
         language_code=language_code,
         diarize=args.diarize,
         keyterms=keyterms,
@@ -178,6 +195,7 @@ def main() -> int:
                     frames,
                     client=codex_client,
                     output_path=vision_dir / "frame_analysis.json",
+                    model=vision_model,
                 )
 
             if not args.skip_minutes:
@@ -187,6 +205,7 @@ def main() -> int:
                     video_name=video_path.name,
                     transcript_segments=segments,
                     frame_analyses=analyses,
+                    model=minutes_model,
                 )
                 minutes_path = run_dir / "minutes.md"
                 minutes_path.write_text(minutes_text + "\n", encoding="utf-8")
@@ -209,9 +228,11 @@ def main() -> int:
             "transcript_json": str(transcript_json_path),
             "minutes": str(minutes_path),
             "language_code": language_code,
-            "scribe_model": args.scribe_model,
+            "scribe_model": scribe_model,
             "codex_command": args.codex_command,
             "codex_model": codex_model,
+            "vision_model": None if args.skip_vision else vision_model,
+            "minutes_model": None if args.skip_minutes else minutes_model,
             "vision_backend": None if args.skip_vision else "codex-app-server",
             "minutes_backend": None if args.skip_minutes else "codex-app-server",
             "keyterms": keyterms,

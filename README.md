@@ -28,9 +28,23 @@ cp .env.example .env
 
 ```bash
 ELEVENLABS_API_KEY=...
+ELEVENLABS_LANGUAGE_CODE=ja
+ELEVENLABS_SCRIBE_MODEL=scribe_v2
+
+# Codex app-server model defaults
+CODEX_MODEL=
+CODEX_VISION_MODEL=
+CODEX_MINUTES_MODEL=
 ```
 
 Codex側は `codex login` 済みである必要があります。
+
+モデル指定:
+
+- 画像解析: `CODEX_VISION_MODEL`
+- 議事録生成: `CODEX_MINUTES_MODEL`
+- 文字起こし: `ELEVENLABS_SCRIBE_MODEL`
+- Codex共通のfallback: `CODEX_MODEL`
 
 ## Usage
 
